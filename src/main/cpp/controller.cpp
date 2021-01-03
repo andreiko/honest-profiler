@@ -154,10 +154,10 @@ void Controller::reportStatus(int clientConnection) {
     // ensures there's space for status, log file path, comma, newline, and NULL
     std::string filePath = profiler_->getFilePath();
     const char *logFilePath = filePath.c_str();
-    int bufSize = strlen(logFilePath) + 10;
+    int bufSize = strlen(logFilePath) + 21;
     char buf[bufSize];
 
-    snprintf(buf, bufSize, "%s,%s\n", samplingIsRunning ? "started" : "stopped", logFilePath);
+    snprintf(buf, bufSize, "%s,%s,%lu\n", samplingIsRunning ? "started" : "stopped", logFilePath, (unsigned long)getpid());
 
     int length = strlen(buf);
 
