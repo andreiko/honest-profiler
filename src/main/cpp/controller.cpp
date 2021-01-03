@@ -1,5 +1,7 @@
 #include "controller.h"
 
+#define MAX_PORT 0xffff
+
 void controllerRunnable(jvmtiEnv *jvmti_env, JNIEnv *jni_env, void *arg) {
     IMPLICITLY_USE(jvmti_env);
     IMPLICITLY_USE(jni_env);
@@ -58,23 +60,42 @@ void Controller::run() {
     hints.ai_socktype = SOCK_STREAM;
     hints.ai_flags = AI_PASSIVE;
 
-    if ((result = getaddrinfo(configuration_.host.c_str(), configuration_.port.c_str(), &hints, &res)) != 0) {
-        logError("ERROR: getaddrinfo: %s\n", gai_strerror(result));
+    int port_num = atoi(configuration_.port.c_str());
+    if (port_num < 1 || port_num > MAX_PORT) {
+        logError("ERROR: invalid port\n");
         return;
     }
 
-    if ((listener = socket(res->ai_family, res->ai_socktype, res->ai_protocol)) == -1) {
-        logError("ERROR: Failed to open socket: %s\n", strerror(errno));
-        return;
+    while(1) {
+        char port_str[6];
+        sprintf(port_str, "%d", port_num);
+
+        if ((result = getaddrinfo(configuration_.host.c_str(), port_str, &hints, &res)) != 0) {
+            logError("ERROR: getaddrinfo: %s\n", gai_strerror(result));
+            return;
+        }
+
+        if ((listener = socket(res->ai_family, res->ai_socktype, res->ai_protocol)) == -1) {
+            logError("ERROR: Failed to open socket: %s\n", strerror(errno));
+            return;
+        }
+
+        setsockopt(listener, SOL_SOCKET, SO_REUSEADDR, &yes, sizeof(int));
+
+        if (bind(listener, res->ai_addr, res->ai_addrlen) == -1) {
+            close(listener);
+            if (port_num >= MAX_PORT) {
+                logError("ERROR: Failed to bind successfully: %s, no ports left to try\n", strerror(errno));
+                return;
+            }
+            port_num++;
+            logError("ERROR: Failed to bind successfully: %s, trying next port: %d\n", strerror(errno), port_num);
+            continue;
+        }
+
+        break;
     }
 
-    setsockopt(listener, SOL_SOCKET, SO_REUSEADDR, &yes, sizeof(int));
-
-    if (bind(listener, res->ai_addr, res->ai_addrlen) == -1) {
-        logError("ERROR: Failed to bind successfully: %s\n", strerror(errno));
-        close(listener);
-        return;
-    }
 
     if (listen(listener, 3) == -1) {
         logError("ERROR: Failed to listen: %s\n", strerror(errno));
